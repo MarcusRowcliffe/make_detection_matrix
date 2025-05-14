@@ -88,8 +88,7 @@ make_detection_matrix <- function(obsdat, depdat,
                ifelse(signsum==4, interval, 
                       ifelse(x[1]<=0, x[2], x[3])))
       }) %>%
-      matrix(ncol=nocc) %>%
-      apply(2, tapply, depdat$locationID, sum)
+      matrix(ncol=nocc)
     
     ijk <- expand.grid(dep=1:ndep, occ=1:nocc, obs=1:nobs)
     loc <- depdat$locationID[ijk$dep]
