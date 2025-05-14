@@ -29,7 +29,7 @@ library(lubridate)
 #'  matrix: the detection matrix
 #'  effort: a matrix of effort (days) for each deployment occasion
 #'  cuts: a vector of the time cuts defining occasions
-get_detection_matrix <- function(obsdat, depdat, 
+make_detection_matrix <- function(obsdat, depdat, 
                                  subset = TRUE,
                                  interval=7, 
                                  start_hour=0,
@@ -39,14 +39,14 @@ get_detection_matrix <- function(obsdat, depdat,
   if(!fieldsOK) 
     stop("Can't find the necessary data: obsdat must contain columns named timestamp and locationID; depdat must contain columns named start, end and locationID")
   depdat <- depdat %>%
-    mutate(start = if(grepl("POSIX", class(dep$start)[1])) start else lubridate::ymd_hms(start),
-           end = if(grepl("POSIX", class(dep$end)[1])) end else lubridate::ymd_hms(end),
+    mutate(start = if(grepl("POSIX", class(depdat$start)[1])) start else lubridate::ymd_hms(start),
+           end = if(grepl("POSIX", class(depdat$end)[1])) end else lubridate::ymd_hms(end),
            deploymentID = as.character(deploymentID),
            locationID = as.character(locationID))
   
   obsdat <- obsdat %>%
     dplyr::filter(!!enquo(subset)) %>%
-    mutate(timestamp = if(grepl("POSIX", class(dep$timestamp)[1])) timestamp else lubridate::ymd_hms(timestamp),
+    mutate(timestamp = if(grepl("POSIX", class(depdat$timestamp)[1])) timestamp else lubridate::ymd_hms(timestamp),
            deploymentID = as.character(deploymentID)) %>%
     dplyr::left_join(dplyr::select(depdat, deploymentID, locationID), 
                      join_by(deploymentID))
@@ -105,3 +105,4 @@ get_detection_matrix <- function(obsdat, depdat,
     return(list(matrix=mat, effort=effort, cuts=cuts))
   }
 }
+
