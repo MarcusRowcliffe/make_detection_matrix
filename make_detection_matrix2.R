@@ -1,3 +1,16 @@
+#' Make a sequence of occasion time cuts
+make_cutSeq <- function(start, end, interval=7, start_hour=0){
+  mn <- min(start) %>%
+    as.POSIXlt()
+  mx <- max(end)
+  time <- mn$hour + mn$min/60 + mn$sec/3600
+  mn <- if(time >= start_hour) 
+    mn - 3600 * (time + start_hour) else
+      mn - 3600 * (time + 24 - start_hour)
+  seq(mn, mx+interval*86400, interval*86400)
+}
+
+#' Make an effort matrix
 make_emat <- function(deployments, cuts = NULL,
                       interval = 7, start_hour = 0){
   if(is.null(cuts)) cuts <- make_cutSeq(deployments$start, 
@@ -40,3 +53,86 @@ make_emat <- function(deployments, cuts = NULL,
     as.matrix()
   list(effort = emat, cuts = cuts)
 }
+
+# Make a detection matrix
+make_dmat <- function(deployments, observations, 
+                      effort = NULL,
+                      trim=FALSE, 
+                      interval=7, 
+                      start_hour=0){
+  if(is.null(effort))
+    effort <- make_emat(deployments, cuts=cuts, interval=interval, start_hour=start_hour)
+  if("locationID" %in% names(observations))
+    observations <- dplyr::select(observations, -locationID)
+  observations <- deployments %>%
+    dplyr::select(deploymentID, locationID) %>%
+    dplyr::right_join(observations, by=join_by(deploymentID))
+  locs <- unique(deployments$locationID)
+  nobs <- nrow(observations)
+  nloc <- length(locs)
+  nocc <- length(effort$cuts) - 1
+  ijk <- expand.grid(loc=1:nloc, occ=1:nocc, obs=1:nobs)
+  deploc <- locs[ijk$loc]
+  obsloc <- observations$locationID[ijk$obs]
+  ts <- observations$timestamp[ijk$obs]
+  cut1 <- effort$cuts[ijk$occ]
+  cut2 <- effort$cuts[ijk$occ+1]
+  isin <- ts >= cut1 & ts < cut2 & obsloc == deploc %>%
+    array(c(nloc, nocc, nobs))
+  mat <- apply(isin, 1:2, any) %>%
+    {+.}
+  emult <- if(trim) ifelse(effort$effort<interval, NA, 1) else 
+    ifelse(effort$effort==0, NA, 1)
+  mat * emult
+}
+
+make_detection_matrix <- function(pkg,
+                                  species,
+                                  trim=FALSE,
+                                  interval=7,
+                                  start_hour=0){
+  obsReq <- c("deploymentID", "scientificName", "timestamp")
+  depReq <- c("deploymentID", "locationID", "start", "end")
+  fieldsOK <- all(obsReq %in% names(pkg$data$observations),
+                  depReq %in% names(pkg$data$deployments))
+  if(!fieldsOK) 
+    stop("Can't find the necessary data: 
+         obsdat must contain columns named timestamp and locationID; 
+         depdat must contain columns named start, end and locationID")
+  
+  if(!all(species %in% pkg$data$observations$scientificName))
+    stop("Can't find any observations for that/those species")
+  
+  depdat <- pkg$data$deployments %>%
+    dplyr::mutate(deploymentID = as.character(deploymentID),
+                  locationID = as.character(locationID))
+  obsdat <- pkg$data$observations %>%
+    dplyr::mutate(deploymentID = as.character(deploymentID))
+  
+  missingDeps <- unique(obsdat$deploymentID[!obsdat$deploymentID %in% depdat$deploymentID])
+  if(length(missingDeps)>0)
+    stop(paste("These deploymentID values in obsdat are missing from depdat:",
+               paste(missingDeps, collapse = " ")))
+  
+  checkdat <- dplyr::left_join(obsdat, 
+                               dplyr::select(depdat, deploymentID, start, end),
+                               by="deploymentID")
+  bad <- with(checkdat, timestamp<start | timestamp>end)
+  if(any(bad)){
+    message("Error: some observations occur outside their deployment time: 
+            returning problematic observations")
+    return(checkdat[bad, ])
+  } else{
+    effort <- make_emat(depdat)
+    dmats <- lapply(species, function(sp) 
+      make_dmat(depdat, 
+                subset(obsdat, scientificName==sp),
+                effort,
+                trim = trim, 
+                interval = interval, 
+                start_hour=start_hour))
+    names(dmats) <- species
+    return(c(effort, matrix=list(dmats)))
+  }
+}
+
