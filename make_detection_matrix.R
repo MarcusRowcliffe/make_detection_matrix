@@ -1,55 +1,115 @@
-library(dplyr)
-library(lubridate)
+#' Make a sequence of occasion time cuts
+make_cutSeq <- function(start, end, interval=7, start_hour=0){
+  mn <- min(start) %>%
+    as.POSIXlt()
+  mx <- max(end)
+  time <- mn$hour + mn$min/60 + mn$sec/3600
+  mn <- if(time >= start_hour) 
+    mn - 3600 * (time + start_hour) else
+      mn - 3600 * (time + 24 - start_hour)
+  seq(mn, mx+interval*86400, interval*86400)
+}
 
-#' Function to make detection matrices for occupancy analysis using camtrapDP data
-#' 
-#' INPUT
-#' obsdat: dataframe of observation data with (at least) columns:
-#'   timestamp: POSIX or character date-times when observations occurred
-#'   deploymentID: unique camera trap location identifier matchable with
-#'       the same key in depdat
-#'   Must also contain any columns named in the subset argument
-#' depdat: dataframe of deployment data with one row per deployment and
-#'   (at least) columns:
-#'    deploymentdID: unique deployment identifier matchable with the same 
-#'      key in obsdat
-#'    locationID: location identifiers (can be repeated)
-#'    start, end: POSIX or character deployment start/end data-times 
-#'      (ymd_hms format if character)
-#' subset: a logical expression defining which subset of obsdat to use, 
-#'   with an obsdat column name  on the left e.g. scientificName == "Dama dama"
-#' interval: length of occasion interval in days
-#' start_hour: a number from 0 to 24 giving the time of day at which to start
-#'  occasions
-#' trim: if TRUE, detection records for all deployment occasions with less 
-#'  than full interval effort are missing, otherwise only those with zero effort.
-#'
-#' OUTPUT
-#' A list with elements:
-#'  matrix: the detection matrix
-#'  effort: a matrix of effort (days) for each deployment occasion
-#'  cuts: a vector of the time cuts defining occasions
-make_detection_matrix <- function(obsdat, depdat, 
-                                 subset = TRUE,
-                                 interval=7, 
-                                 start_hour=0,
-                                 trim=FALSE){
-  fieldsOK <- all(c("deploymentID", "timestamp") %in% names(obsdat),
-                  c("deploymentID", "locationID", "start", "end") %in% names(depdat))
-  if(!fieldsOK) 
-    stop("Can't find the necessary data: obsdat must contain columns named timestamp and locationID; depdat must contain columns named start, end and locationID")
-  depdat <- depdat %>%
-    mutate(start = if(grepl("POSIX", class(depdat$start)[1])) start else lubridate::ymd_hms(start),
-           end = if(grepl("POSIX", class(depdat$end)[1])) end else lubridate::ymd_hms(end),
-           deploymentID = as.character(deploymentID),
-           locationID = as.character(locationID))
+#' Make an effort matrix
+make_emat <- function(deployments, cuts = NULL,
+                      interval = 7, start_hour = 0){
+  if(is.null(cuts)) cuts <- make_cutSeq(deployments$start, 
+                                        deployments$end, 
+                                        interval = interval,
+                                        start_hour = start_hour)
+  intervals <- as.numeric(diff(cuts))
+  if(any(intervals <= 0))
+    stop("cuts are not continually increasing")
+  if(min(deployments$start) < min(cuts) | max(deployments$end) > max(cuts))
+    stop("cuts do not span start/end times")
   
-  obsdat <- obsdat %>%
-    dplyr::filter(!!enquo(subset)) %>%
-    mutate(timestamp = if(grepl("POSIX", class(depdat$timestamp)[1])) timestamp else lubridate::ymd_hms(timestamp),
-           deploymentID = as.character(deploymentID)) %>%
-    dplyr::left_join(dplyr::select(depdat, deploymentID, locationID), 
-                     join_by(deploymentID))
+  nocc <- length(intervals)
+  ndep <- nrow(deployments)
+  emat <- data.frame(loc = rep(deployments$locationID, nocc),
+                     occ = rep(1:nocc, each = ndep),
+                     s = rep(deployments$start, nocc),
+                     e = rep(deployments$end, nocc),
+                     c1 = rep(head(cuts, -1), each=ndep),
+                     c2 = rep(tail(cuts, -1), each=ndep),
+                     i = rep(intervals, each=ndep),
+                     z = 0) %>%
+    dplyr::mutate(e_c1 = as.numeric(difftime(e, c1, units="day")),
+                  c2_s = as.numeric(difftime(c2, s, units="day")),
+                  e_s = as.numeric(difftime(e, s, units="day")),
+                  sums = (c1<s) + (c2<=s) + (c1<e) + (c2<=e),
+                  sel = case_when(sums==1 ~ "e_c1",
+                                  sums==2 & c2>e ~ "e_s",
+                                  sums==2 & c2<=e ~ "i",
+                                  sums==3 ~ "c2_s",
+                                  .default = "z")) %>%
+    rowwise() %>%
+    mutate(eff = get(sel)) %>%
+    select(loc, occ, eff) %>%
+    dplyr::group_by(loc, occ) %>%
+    dplyr::summarise(eff = sum(eff), .groups = "drop") %>%
+    dplyr::ungroup() %>%
+    tidyr::pivot_wider(names_from = occ, values_from = eff) %>%
+    tibble::column_to_rownames("loc") %>%
+    as.matrix()
+  list(effort = emat, cuts = cuts)
+}
+
+#' Make a detection matrix from 
+make_dmat <- function(deployments, observations, 
+                      effort = NULL,
+                      trim=FALSE, 
+                      interval=7, 
+                      start_hour=0){
+  if(is.null(effort))
+    effort <- make_emat(deployments, cuts=cuts, interval=interval, start_hour=start_hour)
+  if("locationID" %in% names(observations))
+    observations <- dplyr::select(observations, -locationID)
+  observations <- deployments %>%
+    dplyr::select(deploymentID, locationID) %>%
+    dplyr::right_join(observations, by=join_by(deploymentID))
+  locs <- unique(deployments$locationID)
+  nobs <- nrow(observations)
+  nloc <- length(locs)
+  nocc <- length(effort$cuts) - 1
+  ijk <- expand.grid(loc=1:nloc, occ=1:nocc, obs=1:nobs)
+  deploc <- locs[ijk$loc]
+  obsloc <- observations$locationID[ijk$obs]
+  ts <- observations$timestamp[ijk$obs]
+  cut1 <- effort$cuts[ijk$occ]
+  cut2 <- effort$cuts[ijk$occ+1]
+  isin <- ts >= cut1 & ts < cut2 & obsloc == deploc %>%
+    array(c(nloc, nocc, nobs))
+  mat <- apply(isin, 1:2, any) %>%
+    {+.}
+  emult <- if(trim) ifelse(effort$effort<interval, NA, 1) else 
+    ifelse(effort$effort==0, NA, 1)
+  mat * emult
+}
+
+#' Make a detection matrix from a camtrapDP datapackage
+make_detection_matrix <- function(pkg,
+                                  species,
+                                  trim=FALSE,
+                                  interval=7,
+                                  start_hour=0){
+  obsReq <- c("deploymentID", "scientificName", "timestamp")
+  depReq <- c("deploymentID", "locationID", "start", "end")
+  fieldsOK <- all(obsReq %in% names(pkg$data$observations),
+                  depReq %in% names(pkg$data$deployments))
+  if(!fieldsOK) 
+    stop("Can't find the necessary data: 
+         obsdat must contain columns named timestamp and locationID; 
+         depdat must contain columns named start, end and locationID")
+  
+  if(!all(species %in% pkg$data$observations$scientificName))
+    stop("Can't find any observations for that/those species")
+  
+  depdat <- pkg$data$deployments %>%
+    dplyr::mutate(deploymentID = as.character(deploymentID),
+                  locationID = as.character(locationID))
+  obsdat <- pkg$data$observations %>%
+    dplyr::mutate(deploymentID = as.character(deploymentID))
+  
   missingDeps <- unique(obsdat$deploymentID[!obsdat$deploymentID %in% depdat$deploymentID])
   if(length(missingDeps)>0)
     stop(paste("These deploymentID values in obsdat are missing from depdat:",
@@ -64,44 +124,16 @@ make_detection_matrix <- function(obsdat, depdat,
             returning problematic observations")
     return(checkdat[bad, ])
   } else{
-    mn <- min(depdat$start) %>%
-      as.POSIXlt()
-    mx <- max(depdat$end)
-    time <- mn$hour + mn$min/60 + mn$sec/3600
-    mn <- if(time >= start_hour) 
-      mn - 3600 * (time + start_hour) else
-        mn - 3600 * (time + 24 - start_hour)
-    cuts <- seq(mn, mx+interval*86400, interval*86400)
-    ndep <- nrow(depdat)
-    nocc <- length(cuts) - 1
-    nobs <- nrow(obsdat)
-    ij <- expand.grid(dep=1:ndep, occ=1:nocc)
-    effort <- with(depdat, 
-                   cbind(difftime(cuts[ij$occ], start[ij$dep], units="day"),
-                         difftime(cuts[ij$occ+1], start[ij$dep], units="day"),
-                         difftime(end[ij$dep], cuts[ij$occ], units="day"),
-                         difftime(end[ij$dep], cuts[ij$occ+1], units="day"))
-    ) %>%
-      apply(1, function(x){
-        signsum <- sum(sign(x))
-        ifelse(signsum==0, 0, 
-               ifelse(signsum==4, interval, 
-                      ifelse(x[1]<=0, x[2], x[3])))
-      }) %>%
-      matrix(ncol=nocc)
-    
-    ijk <- expand.grid(dep=1:ndep, occ=1:nocc, obs=1:nobs)
-    loc <- depdat$locationID[ijk$dep]
-    isin <- obsdat$timestamp[ijk$obs] >= cuts[ijk$occ] & 
-      obsdat$timestamp[ijk$obs] <= cuts[ijk$occ+1] & 
-      obsdat$locationID[ijk$obs] == loc
-    mat <- isin %>%
-      tapply(list(loc, ijk$occ), any) %>%
-      as.numeric() %>%
-      matrix(ncol=nocc)
-    if(trim) mat[effort<interval] <- NA else
-      mat[effort==0] <- NA
-    return(list(matrix=mat, effort=effort, cuts=cuts))
+    effort <- make_emat(depdat)
+    dmats <- lapply(species, function(sp) 
+      make_dmat(depdat, 
+                subset(obsdat, scientificName==sp),
+                effort,
+                trim = trim, 
+                interval = interval, 
+                start_hour=start_hour))
+    names(dmats) <- species
+    return(c(effort, matrix=list(dmats)))
   }
 }
 
