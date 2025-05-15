@@ -1,3 +1,5 @@
+library(dplyr)
+
 #' Make a sequence of occasion time cuts
 make_cutSeq <- function(start, end, interval=7, start_hour=0){
   mn <- min(start) %>%
