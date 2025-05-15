@@ -54,7 +54,7 @@ make_emat <- function(deployments, cuts = NULL,
   list(effort = emat, cuts = cuts)
 }
 
-# Make a detection matrix
+#' Make a detection matrix from 
 make_dmat <- function(deployments, observations, 
                       effort = NULL,
                       trim=FALSE, 
@@ -86,6 +86,7 @@ make_dmat <- function(deployments, observations,
   mat * emult
 }
 
+#' Make a detection matrix from a camtrapDP datapackage
 make_detection_matrix <- function(pkg,
                                   species,
                                   trim=FALSE,
