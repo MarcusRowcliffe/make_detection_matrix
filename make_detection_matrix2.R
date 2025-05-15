@@ -24,7 +24,7 @@ make_emat <- function(deployments, cuts = NULL,
     stop("cuts do not span start/end times")
   
   nocc <- length(intervals)
-  ndep <- length(deployments)
+  ndep <- nrow(deployments)
   emat <- data.frame(loc = rep(deployments$locationID, nocc),
                      occ = rep(1:nocc, each = ndep),
                      s = rep(deployments$start, nocc),
