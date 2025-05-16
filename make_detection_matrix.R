@@ -1,6 +1,15 @@
 library(dplyr)
 
 #' Make a sequence of occasion time cuts
+#' 
+#' INPUT
+#' start / end: matching vectors of POSIX deployment start / end date-times
+#' interval: occasion intervals in days
+#' start_hour: numeric hour of day at which to start the sequence
+#' 
+#' OUTPUT
+#' A regular sequence of POSIX data-times spanning the range of start / end
+#' 
 make_cutSeq <- function(start, end, interval=7, start_hour=0){
   mn <- min(start) %>%
     as.POSIXlt()
@@ -13,6 +22,20 @@ make_cutSeq <- function(start, end, interval=7, start_hour=0){
 }
 
 #' Make an effort matrix
+#' 
+#' INPUT
+#' deployments: a dataframe of deployment data with columns
+#'    locationID: location identifiers
+#'    start / end: POSIX date-times at which deployments start and end
+#' cuts: a sequence of POSIX date-times defining detection occasions
+#'    Generated internally using make_cutSeq if NULL
+#' interval / start_hour: passed to make_cutSeq if cuts is NULL
+#' 
+#' OUTPUT
+#' A list with elements:
+#'    effort: a sites x occasions numeric matrix of effort in days
+#'    cuts: a POSIX vector of the occasion date-time cutpoints
+#'    
 make_emat <- function(deployments, cuts = NULL,
                       interval = 7, start_hour = 0){
   if(is.null(cuts)) cuts <- make_cutSeq(deployments$start, 
@@ -56,7 +79,23 @@ make_emat <- function(deployments, cuts = NULL,
   list(effort = emat, cuts = cuts)
 }
 
-#' Make a detection matrix from 
+#' Make a detection matrix from dataframes
+#' 
+#' INPUT
+#' deployments: dataframe of deployment data with columns:
+#'    deploymentID / locationID: deployment and location identifiers
+#'    start / end: POSX deployment start / end date-times (required if effort is NULL)
+#' observations: dataframe of observation data with columns:
+#'    deploymentID: deployment identifiers
+#'    timestamp: POSIX date-times of observation occurence
+#' effort: sites x occasions matrix of effort values
+#'    Generated internally using make_emat if NULL
+#' trim: logical, whether incomplete cells (effort<interval) should be set to NA
+#' interval / start_hour: passed to make_emat then make_cutSeq if effort is NULL
+#' 
+#' OUTPUT
+#' A sites x occasions detection / non-detection matrix
+#' 
 make_dmat <- function(deployments, observations, 
                       effort = NULL,
                       trim=FALSE, 
@@ -89,6 +128,21 @@ make_dmat <- function(deployments, observations,
 }
 
 #' Make a detection matrix from a camtrapDP datapackage
+#' 
+#' INPUT
+#' pkg: a camtrapDP-like list of camera trap data containing
+#'    package$data$deployments and package$data$observations, dataframes with
+#'    required columns as for make_dmat, plus scientificName required in observations
+#' species: a character vector giving one or more species to create matrices for
+#' trim / interval / start_hour: arguments passed to make_dmat
+#' 
+#' OUTPUT
+#' A list with elements:
+#'    effort: a sites x occasions effort matrix
+#'    cuts: POSIX occasion date-time cutpoints
+#'    matrix: named a list of detection-nondetection matrices, one for each 
+#'      species named in the species argument
+#'      
 make_detection_matrix <- function(pkg,
                                   species,
                                   trim=FALSE,
@@ -138,4 +192,3 @@ make_detection_matrix <- function(pkg,
     return(c(effort, matrix=list(dmats)))
   }
 }
-
