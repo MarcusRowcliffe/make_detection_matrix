@@ -3,6 +3,7 @@ library(lubridate)
 
 deployments <- data.frame(deploymentID = c(1,2,3,4),
                   locationID = c(1,1,2,3),
+                  locationName = c("a", "a", "b", "c"),
                   start = ymd_hms(c("2000/01/01 00:00:00",
                                     "2000/02/20 00:00:00",
                                     "2000/01/01 00:00:00",
@@ -18,12 +19,14 @@ observations <- data.frame(deploymentID = c(1,1,2,3),
                                         "2000/02/22 05:05:05",
                                         "2000/01/15 14:14:14")))
 pk <- list(data=list(observations=observations, deployments=deployments))
-res <- make_detection_matrix(pk, 
-                            species = "c",
-                            interval = 7, 
-                            start_hour = 0)
-res$matrix
+
 make_emat(deployments, start_hour = 10, interval = 10)
-res$matrix
+make_dmat(deployments, observations)
+make_dmat(deployments, subset(observations, scientificName=="b"))
+make_detection_matrix(pk, species = "b")
+res <- make_detection_matrix(pk, species = c("a", "b", "c"))
+res$matrix$a
+res$matrix$b
+res$matrix$c
 res$effort
 res$cuts
