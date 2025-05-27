@@ -25,7 +25,8 @@ make_cutSeq <- function(start, end, interval=7, start_hour=0){
 #' 
 #' INPUT
 #' deployments: a dataframe of deployment data with columns
-#'    locationID: location identifiers
+#'    locationID: location identifiers, typically globally unique
+#'    locationName: alternative location identifiers, typically shorter, locally unique
 #'    start / end: POSIX date-times at which deployments start and end
 #' cuts: a sequence of POSIX date-times defining detection occasions
 #'    Generated internally using make_cutSeq if NULL
@@ -50,7 +51,7 @@ make_emat <- function(deployments, cuts = NULL,
   
   nocc <- length(intervals)
   ndep <- nrow(deployments)
-  emat <- data.frame(loc = rep(deployments$locationID, nocc),
+  emat <- data.frame(loc = rep(deployments$locationName, nocc),
                      occ = rep(1:nocc, each = ndep),
                      s = rep(deployments$start, nocc),
                      e = rep(deployments$end, nocc),
@@ -85,6 +86,7 @@ make_emat <- function(deployments, cuts = NULL,
 #' deployments: dataframe of deployment data with columns:
 #'    deploymentID / locationID: deployment and location identifiers
 #'    start / end: POSX deployment start / end date-times (required if effort is NULL)
+#'    (locationName): location name, required if effort = NULL
 #' observations: dataframe of observation data with columns:
 #'    deploymentID: deployment identifiers
 #'    timestamp: POSIX date-times of observation occurence
@@ -98,6 +100,7 @@ make_emat <- function(deployments, cuts = NULL,
 #' 
 make_dmat <- function(deployments, observations, 
                       effort = NULL,
+                      cuts = NULL,
                       trim=FALSE, 
                       interval=7, 
                       start_hour=0){
