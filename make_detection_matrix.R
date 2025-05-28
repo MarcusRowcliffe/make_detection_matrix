@@ -25,7 +25,7 @@ make_cutSeq <- function(start, end, interval=7, start_hour=0){
 #' 
 #' INPUT
 #' deployments: a dataframe of deployment data with columns
-#'    locationID: location identifiers, typically globally unique
+#'    locationName: location identifiers, typically globally unique
 #'    locationName: alternative location identifiers, typically shorter, locally unique
 #'    start / end: POSIX date-times at which deployments start and end
 #' cuts: a sequence of POSIX date-times defining detection occasions
@@ -83,41 +83,43 @@ make_emat <- function(deployments, cuts = NULL,
 #' Make a detection matrix from dataframes
 #' 
 #' INPUT
-#' deployments: dataframe of deployment data with columns:
-#'    deploymentID / locationID: deployment and location identifiers
-#'    start / end: POSX deployment start / end date-times (required if effort is NULL)
-#'    (locationName): location name, required if effort = NULL
+#' deployments: dataframe of deployment data with columns as for make_emat plus:
+#'    deploymentID: deployment identifier matched with observations$deploymentID
 #' observations: dataframe of observation data with columns:
 #'    deploymentID: deployment identifiers
 #'    timestamp: POSIX date-times of observation occurence
-#' effort: sites x occasions matrix of effort values
-#'    Generated internally using make_emat if NULL
+#' cuts: vector sequence of POSIX values (see make_emat)
 #' trim: logical, whether incomplete cells (effort<interval) should be set to NA
 #' interval / start_hour: passed to make_emat then make_cutSeq if effort is NULL
 #' 
 #' OUTPUT
 #' A sites x occasions detection / non-detection matrix
 #' 
+#' DETAILS
+#' Cuts must span deployment start/end times but not observations times - any
+#' observations outside cuts range will simply be ignored without a warning.
 make_dmat <- function(deployments, observations, 
-                      effort = NULL,
                       cuts = NULL,
                       trim=FALSE, 
                       interval=7, 
                       start_hour=0){
-  if(is.null(effort))
-    effort <- make_emat(deployments, cuts=cuts, interval=interval, start_hour=start_hour)
-  if("locationID" %in% names(observations))
-    observations <- dplyr::select(observations, -locationID)
+  
+  effort <- make_emat(deployments, 
+                      cuts=cuts, 
+                      interval=interval, 
+                      start_hour=start_hour)
+  if("locationName" %in% names(observations))
+    observations <- dplyr::select(observations, -locationName)
   observations <- deployments %>%
-    dplyr::select(deploymentID, locationID) %>%
+    dplyr::select(deploymentID, locationName) %>%
     dplyr::right_join(observations, by=join_by(deploymentID))
-  locs <- unique(deployments$locationID)
+  locs <- sort(unique(deployments$locationName))
   nobs <- nrow(observations)
   nloc <- length(locs)
   nocc <- length(effort$cuts) - 1
   ijk <- expand.grid(loc=1:nloc, occ=1:nocc, obs=1:nobs)
   deploc <- locs[ijk$loc]
-  obsloc <- observations$locationID[ijk$obs]
+  obsloc <- observations$locationName[ijk$obs]
   ts <- observations$timestamp[ijk$obs]
   cut1 <- effort$cuts[ijk$occ]
   cut2 <- effort$cuts[ijk$occ+1]
@@ -152,20 +154,20 @@ make_detection_matrix <- function(pkg,
                                   interval=7,
                                   start_hour=0){
   obsReq <- c("deploymentID", "scientificName", "timestamp")
-  depReq <- c("deploymentID", "locationID", "start", "end")
+  depReq <- c("deploymentID", "locationName", "start", "end")
   fieldsOK <- all(obsReq %in% names(pkg$data$observations),
                   depReq %in% names(pkg$data$deployments))
   if(!fieldsOK) 
     stop("Can't find the necessary data: 
-         obsdat must contain columns named timestamp and locationID; 
-         depdat must contain columns named start, end and locationID")
+         obsdat must contain columns named timestamp and locationName; 
+         depdat must contain columns named start, end and locationName")
   
   if(!all(species %in% pkg$data$observations$scientificName))
     stop("Can't find any observations for that/those species")
   
   depdat <- pkg$data$deployments %>%
     dplyr::mutate(deploymentID = as.character(deploymentID),
-                  locationID = as.character(locationID))
+                  locationName = as.character(locationName))
   obsdat <- pkg$data$observations %>%
     dplyr::mutate(deploymentID = as.character(deploymentID))
   
@@ -187,7 +189,6 @@ make_detection_matrix <- function(pkg,
     dmats <- lapply(species, function(sp) 
       make_dmat(depdat, 
                 subset(obsdat, scientificName==sp),
-                effort,
                 trim = trim, 
                 interval = interval, 
                 start_hour=start_hour))
