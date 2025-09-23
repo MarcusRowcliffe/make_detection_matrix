@@ -100,10 +100,12 @@ make_emat <- function(deployments, cuts = NULL,
 #' observations outside cuts range will simply be ignored without a warning.
 make_dmat <- function(deployments, observations, 
                       cuts = NULL,
-                      trim=FALSE, 
-                      interval=7, 
-                      start_hour=0){
+                      trim = FALSE, 
+                      interval = 7, 
+                      start_hour = 0,
+                      type = c("presence", "count")){
   
+  type <- match.arg(type)
   effort <- make_emat(deployments, 
                       cuts=cuts, 
                       interval=interval, 
@@ -125,8 +127,8 @@ make_dmat <- function(deployments, observations,
   cut2 <- effort$cuts[ijk$occ+1]
   isin <- ts >= cut1 & ts < cut2 & obsloc == deploc %>%
     array(c(nloc, nocc, nobs))
-  mat <- apply(isin, 1:2, any) %>%
-    {+.}
+  mat <- apply(isin, 1:2, sum)
+  if(type == "presence") mat[mat>1] <- 1
   emult <- if(trim) ifelse(effort$effort<interval, NA, 1) else 
     ifelse(effort$effort==0, NA, 1)
   mat * emult
@@ -153,7 +155,9 @@ make_detection_matrix <- function(pkg,
                                   trim=FALSE,
                                   interval=7,
                                   start_hour=0,
-                                  fail_outliers=FALSE){
+                                  fail_outliers=FALSE,
+                                  type = c("presence", "count")){
+  type <- match.arg(type)
   obsReq <- c("deploymentID", "scientificName", "timestamp")
   depReq <- c("deploymentID", "locationName", "start", "end")
   fieldsOK <- all(obsReq %in% names(pkg$data$observations),
@@ -193,7 +197,8 @@ make_detection_matrix <- function(pkg,
                 subset(obsdat, scientificName==sp),
                 trim = trim, 
                 interval = interval, 
-                start_hour=start_hour))
+                start_hour = start_hour,
+                type = type))
     names(dmats) <- species
     return(c(effort, matrix=list(dmats)))
   }
