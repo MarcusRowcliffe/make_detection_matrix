@@ -24,10 +24,10 @@ observations <- data.frame(deploymentID = c("d1", "d1", "d2", "d3", "d4", "d4", 
 pk <- list(data=list(observations=observations, deployments=deployments))
 
 make_emat(deployments)
-make_dmat(deployments, observations)
-make_dmat(deployments, subset(observations, scientificName=="sp1"))
+make_dmat(deployments, observations, type="c")
+make_dmat(deployments, subset(observations, scientificName=="sp2"), type="c")
 
-make_detection_matrix(pk, species = "sp2")
+make_detection_matrix(pk, species = "sp2", type="c")
 res <- make_detection_matrix(pk, species = c("sp1", "sp2", "sp3"))
 res$matrix$sp1
 res$matrix$sp2
