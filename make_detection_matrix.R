@@ -152,7 +152,8 @@ make_detection_matrix <- function(pkg,
                                   species,
                                   trim=FALSE,
                                   interval=7,
-                                  start_hour=0){
+                                  start_hour=0,
+                                  fail_outliers=FALSE){
   obsReq <- c("deploymentID", "scientificName", "timestamp")
   depReq <- c("deploymentID", "locationName", "start", "end")
   fieldsOK <- all(obsReq %in% names(pkg$data$observations),
@@ -180,11 +181,12 @@ make_detection_matrix <- function(pkg,
                                dplyr::select(depdat, deploymentID, start, end),
                                by="deploymentID")
   bad <- with(checkdat, timestamp<start | timestamp>end)
-  if(any(bad)){
+  if(any(bad) & fail_outliers){
     message("Error: some observations occur outside their deployment time: 
             returning problematic observations")
     return(checkdat[bad, ])
   } else{
+    obsdat <- subset(obsdat, !bad)
     effort <- make_emat(depdat)
     dmats <- lapply(species, function(sp) 
       make_dmat(depdat, 
