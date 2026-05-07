@@ -25,7 +25,7 @@ make_cutSeq <- function(start, end, interval=7, start_hour=0){
 #' 
 #' INPUT
 #' deployments: a dataframe of deployment data with columns
-#'    locationID: location identifiers, typically globally unique
+#'    locationID: location identifiers
 #'    locationName: alternative location identifiers, typically shorter, locally unique
 #'    deploymentStart / deploymentEnd: POSIX date-times at which deployments start and end
 #' cuts: a sequence of POSIX date-times defining detection occasions
