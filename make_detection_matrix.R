@@ -25,9 +25,9 @@ make_cutSeq <- function(start, end, interval=7, start_hour=0){
 #' 
 #' INPUT
 #' deployments: a dataframe of deployment data with columns
-#'    locationName: location identifiers, typically globally unique
+#'    locationID: location identifiers, typically globally unique
 #'    locationName: alternative location identifiers, typically shorter, locally unique
-#'    start / end: POSIX date-times at which deployments start and end
+#'    deploymentStart / deploymentEnd: POSIX date-times at which deployments start and end
 #' cuts: a sequence of POSIX date-times defining detection occasions
 #'    Generated internally using make_cutSeq if NULL
 #' interval / start_hour: passed to make_cutSeq if cuts is NULL
@@ -39,22 +39,22 @@ make_cutSeq <- function(start, end, interval=7, start_hour=0){
 #'    
 make_emat <- function(deployments, cuts = NULL,
                       interval = 7, start_hour = 0){
-  if(is.null(cuts)) cuts <- make_cutSeq(deployments$start, 
-                                        deployments$end, 
+  if(is.null(cuts)) cuts <- make_cutSeq(deployments$deploymentStart, 
+                                        deployments$deploymentEnd, 
                                         interval = interval,
                                         start_hour = start_hour)
   intervals <- as.numeric(diff(cuts))
   if(any(intervals <= 0))
     stop("cuts are not continually increasing")
-  if(min(deployments$start) < min(cuts) | max(deployments$end) > max(cuts))
+  if(min(deployments$deploymentStart) < min(cuts) | max(deployments$deploymentEnd) > max(cuts))
     stop("cuts do not span start/end times")
   
   nocc <- length(intervals)
   ndep <- nrow(deployments)
   emat <- data.frame(loc = rep(deployments$locationName, nocc),
                      occ = rep(1:nocc, each = ndep),
-                     s = rep(deployments$start, nocc),
-                     e = rep(deployments$end, nocc),
+                     s = rep(deployments$deploymentStart, nocc),
+                     e = rep(deployments$deploymentEnd, nocc),
                      c1 = rep(head(cuts, -1), each=ndep),
                      c2 = rep(tail(cuts, -1), each=ndep),
                      i = rep(intervals, each=ndep),
@@ -87,7 +87,7 @@ make_emat <- function(deployments, cuts = NULL,
 #'    deploymentID: deployment identifier matched with observations$deploymentID
 #' observations: dataframe of observation data with columns:
 #'    deploymentID: deployment identifiers
-#'    timestamp: POSIX date-times of observation occurence
+#'    eventStart: POSIX date-times of observation occurence
 #' cuts: vector sequence of POSIX values (see make_emat)
 #' trim: logical, whether incomplete cells (effort<interval) should be set to NA
 #' interval / start_hour: passed to make_emat then make_cutSeq if effort is NULL
@@ -120,7 +120,7 @@ make_dmat <- function(deployments, observations,
   ijk <- expand.grid(loc=1:nloc, occ=1:nocc, obs=1:nobs)
   deploc <- locs[ijk$loc]
   obsloc <- observations$locationName[ijk$obs]
-  ts <- observations$timestamp[ijk$obs]
+  ts <- observations$eventStart[ijk$obs]
   cut1 <- effort$cuts[ijk$occ]
   cut2 <- effort$cuts[ijk$occ+1]
   isin <- ts >= cut1 & ts < cut2 & obsloc == deploc %>%
@@ -154,14 +154,14 @@ make_detection_matrix <- function(pkg,
                                   interval=7,
                                   start_hour=0,
                                   fail_outliers=FALSE){
-  obsReq <- c("deploymentID", "scientificName", "timestamp")
-  depReq <- c("deploymentID", "locationName", "start", "end")
+  obsReq <- c("deploymentID", "scientificName", "eventStart")
+  depReq <- c("deploymentID", "locationName", "deploymentStart", "deploymentEnd")
   fieldsOK <- all(obsReq %in% names(pkg$data$observations),
                   depReq %in% names(pkg$data$deployments))
   if(!fieldsOK) 
     stop("Can't find the necessary data: 
-         obsdat must contain columns named timestamp and locationName; 
-         depdat must contain columns named start, end and locationName")
+         obsdat must contain columns named eventStart and locationName; 
+         depdat must contain columns named deploymentStart, deploymentEnd and locationName")
   
   if(!all(species %in% pkg$data$observations$scientificName))
     stop("Can't find any observations for that/those species")
@@ -178,9 +178,9 @@ make_detection_matrix <- function(pkg,
                paste(missingDeps, collapse = " ")))
   
   checkdat <- dplyr::left_join(obsdat, 
-                               dplyr::select(depdat, deploymentID, start, end),
+                               dplyr::select(depdat, deploymentID, deploymentStart, deploymentEnd),
                                by="deploymentID")
-  bad <- with(checkdat, timestamp<start | timestamp>end)
+  bad <- with(checkdat, eventStart<deploymentStart | eventStart>deploymentEnd)
   if(any(bad) & fail_outliers){
     message("Error: some observations occur outside their deployment time: 
             returning problematic observations")
