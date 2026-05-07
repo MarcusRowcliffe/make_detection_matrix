@@ -104,7 +104,6 @@ make_dmat <- function(deployments, observations,
                       interval = 7, 
                       start_hour = 0,
                       type = c("presence", "count")){
-  
   type <- match.arg(type)
   effort <- make_emat(deployments, 
                       cuts=cuts, 
