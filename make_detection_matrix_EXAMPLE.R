@@ -1,6 +1,9 @@
 source("https://raw.githubusercontent.com/MarcusRowcliffe/make_detection_matrix/refs/heads/main/make_detection_matrix.R")
 library(lubridate)
 
+
+# Synthetic data ####
+
 deployments <- data.frame(deploymentID = c("d1", "d2", "d3", "d4"),
                   locationID = c("l1", "l1", "l3", "l2"),
                   locationName = c("c", "c", "a", "b"),
@@ -34,3 +37,9 @@ res$matrix$sp2
 res$matrix$sp3
 res$effort
 res$cuts
+
+
+# Agouti export data ####
+library(camtraptor)
+pk <- read_camtrap_dp("C:/Users/rowcliffe.m/OneDrive - Zoological Society of London/GitHub/camtrapDensity/rem-test-20241111152200/datapackage.json")
+make_detection_matrix(pk, species = "Vulpes vulpes")

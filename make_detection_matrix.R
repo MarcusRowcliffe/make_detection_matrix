@@ -25,7 +25,7 @@ make_cutSeq <- function(start, end, interval=7, start_hour=0){
 #' 
 #' INPUT
 #' deployments: a dataframe of deployment data with columns
-#'    locationName: location identifiers, typically globally unique
+#'    locationID: location identifiers, typically globally unique
 #'    locationName: alternative location identifiers, typically shorter, locally unique
 #'    start / end: POSIX date-times at which deployments start and end
 #' cuts: a sequence of POSIX date-times defining detection occasions
@@ -140,8 +140,11 @@ make_dmat <- function(deployments, observations,
 #' pkg: a camtrapDP-like list of camera trap data containing
 #'    package$data$deployments and package$data$observations, dataframes with
 #'    required columns as for make_dmat, plus scientificName required in observations
-#' species: a character vector giving one or more species to create matrices for
+#' species: a character vector giving one or more species to create matrices for;
+#'    uses scientific binomial names, matched in observations$scientificName
 #' trim / interval / start_hour: arguments passed to make_dmat
+#' fail_outliers: logical, if TRUE function fails if any observations are outside
+#'    their deployment time
 #' 
 #' OUTPUT
 #' A list with elements:
