@@ -91,6 +91,8 @@ make_emat <- function(deployments, cuts = NULL,
 #' cuts: vector sequence of POSIX values (see make_emat)
 #' trim: logical, whether incomplete cells (effort<interval) should be set to NA
 #' interval / start_hour: passed to make_emat then make_cutSeq if effort is NULL
+#' type: presence returns a binary presence/absence matrix; count returns an
+#'    observation count matrix
 #' 
 #' OUTPUT
 #' A sites x occasions detection / non-detection matrix
@@ -142,7 +144,7 @@ make_dmat <- function(deployments, observations,
 #'    required columns as for make_dmat, plus scientificName required in observations
 #' species: a character vector giving one or more species to create matrices for;
 #'    uses scientific binomial names, matched in observations$scientificName
-#' trim / interval / start_hour: arguments passed to make_dmat
+#' trim / interval / start_hour / type: arguments passed to make_dmat
 #' fail_outliers: logical, if TRUE function fails if any observations are outside
 #'    their deployment time
 #' 
