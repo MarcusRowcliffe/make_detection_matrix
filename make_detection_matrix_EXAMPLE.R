@@ -7,23 +7,23 @@ library(lubridate)
 deployments <- data.frame(deploymentID = c("d1", "d2", "d3", "d4"),
                   locationID = c("l1", "l1", "l3", "l2"),
                   locationName = c("c", "c", "a", "b"),
-                  start = ymd_hms(c("2000/01/01 00:00:00",
-                                    "2000/02/20 00:00:00",
-                                    "2000/01/01 00:00:00",
-                                    "2000/01/01 00:00:00")),
-                  end = ymd_hms(c("2000/02/01 00:00:00",
-                                  "2000/03/01 00:00:00",
-                                  "2000/02/01 00:00:00",
-                                  "2000/03/01 00:00:00")))
+                  deploymentstart = ymd_hms(c("2000/01/01 00:00:00",
+                                              "2000/02/20 00:00:00",
+                                              "2000/01/01 00:00:00",
+                                              "2000/01/01 00:00:00")),
+                  deploymentend = ymd_hms(c("2000/02/01 00:00:00",
+                                            "2000/03/01 00:00:00",
+                                            "2000/02/01 00:00:00",
+                                            "2000/03/01 00:00:00")))
 observations <- data.frame(deploymentID = c("d1", "d1", "d2", "d3", "d4", "d4", "d4"),
-                  scientificName = c("sp1", "sp2", "sp2", "sp3", "sp1", "sp2", "sp2"),
-                  timestamp = ymd_hms(c("2000/01/02 12:12:12",
-                                        "2000/01/15 21:21:21",
-                                        "2000/02/22 05:05:05",
-                                        "2000/01/15 14:14:14",
-                                        "2000/02/28 14:14:14",
-                                        "2000/01/17 14:14:14",
-                                        "2000/01/18 14:14:14")))
+                           scientificName = c("sp1", "sp2", "sp2", "sp3", "sp1", "sp2", "sp2"),
+                           eventStart = ymd_hms(c("2000/01/02 12:12:12",
+                                                  "2000/01/15 21:21:21",
+                                                  "2000/02/22 05:05:05",
+                                                  "2000/01/15 14:14:14",
+                                                  "2000/02/28 14:14:14",
+                                                  "2000/01/17 14:14:14",
+                                                  "2000/01/18 14:14:14")))
 pk <- list(data=list(observations=observations, deployments=deployments))
 
 make_emat(deployments)
@@ -40,6 +40,6 @@ res$cuts
 
 
 # Agouti export data ####
-library(camtraptor)
-pk <- read_camtrap_dp("C:/Users/rowcliffe.m/OneDrive - Zoological Society of London/GitHub/camtrapDensity/rem-test-20241111152200/datapackage.json")
+library(camtrapdp)
+pk <- camtrapdp::read_camtrapdp("C:/Users/rowcliffe.m/OneDrive - Zoological Society of London/GitHub/camtrapDensity/rem-test-20241111152200/datapackage.json")
 make_detection_matrix(pk, species = "Vulpes vulpes")
