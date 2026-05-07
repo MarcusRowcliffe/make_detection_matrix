@@ -100,10 +100,12 @@ make_emat <- function(deployments, cuts = NULL,
 #' observations outside cuts range will simply be ignored without a warning.
 make_dmat <- function(deployments, observations, 
                       cuts = NULL,
-                      trim=FALSE, 
-                      interval=7, 
-                      start_hour=0){
+                      trim = FALSE, 
+                      interval = 7, 
+                      start_hour = 0,
+                      type = c("presence", "count")){
   
+  type <- match.arg(type)
   effort <- make_emat(deployments, 
                       cuts=cuts, 
                       interval=interval, 
@@ -125,8 +127,8 @@ make_dmat <- function(deployments, observations,
   cut2 <- effort$cuts[ijk$occ+1]
   isin <- ts >= cut1 & ts < cut2 & obsloc == deploc %>%
     array(c(nloc, nocc, nobs))
-  mat <- apply(isin, 1:2, any) %>%
-    {+.}
+  mat <- apply(isin, 1:2, sum)
+  if(type == "presence") mat[mat>1] <- 1
   emult <- if(trim) ifelse(effort$effort<interval, NA, 1) else 
     ifelse(effort$effort==0, NA, 1)
   mat * emult
@@ -138,8 +140,11 @@ make_dmat <- function(deployments, observations,
 #' pkg: a camtrapDP-like list of camera trap data containing
 #'    package$data$deployments and package$data$observations, dataframes with
 #'    required columns as for make_dmat, plus scientificName required in observations
-#' species: a character vector giving one or more species to create matrices for
+#' species: a character vector giving one or more species to create matrices for;
+#'    uses scientific binomial names, matched in observations$scientificName
 #' trim / interval / start_hour: arguments passed to make_dmat
+#' fail_outliers: logical, if TRUE function fails if any observations are outside
+#'    their deployment time
 #' 
 #' OUTPUT
 #' A list with elements:
@@ -193,7 +198,8 @@ make_detection_matrix <- function(pkg,
                 subset(obsdat, scientificName==sp),
                 trim = trim, 
                 interval = interval, 
-                start_hour=start_hour))
+                start_hour = start_hour,
+                type = type))
     names(dmats) <- species
     return(c(effort, matrix=list(dmats)))
   }
