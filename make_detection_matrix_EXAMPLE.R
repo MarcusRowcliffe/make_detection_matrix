@@ -42,7 +42,7 @@ res$cuts
 # Agouti export data ####
 
 library(camtrapdp)
-pk <- camtrapdp::read_camtrapdp("C:/Users/rowcliffe.m/OneDrive - Zoological Society of London/GitHub/camtrapDensity/rem-test-20241111152200/datapackage.json")
+pk <- read_camtrapdp("./test-package/datapackage.json")
 # single species
 make_detection_matrix(pk, species="Vulpes vulpes")
 # multiple species
@@ -53,7 +53,3 @@ make_detection_matrix(pk, species=spp)
 make_detection_matrix(pk, species=spp, interval=4)
 # count rather than presence absence
 make_detection_matrix(pk, species=spp, interval=4, type="count")
-
-library(camtrapDensity)
-pk0 <- camtraptor::read_camtrap_dp("C:/Users/rowcliffe.m/OneDrive - Zoological Society of London/GitHub/camtrapDensity/rem-test-20241111152200/datapackage.json")
-plot_deployment_schedule(pk0)
