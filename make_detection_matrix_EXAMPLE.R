@@ -5,13 +5,12 @@ library(lubridate)
 # Synthetic data ####
 
 deployments <- data.frame(deploymentID = c("d1", "d2", "d3", "d4"),
-                  locationID = c("l1", "l1", "l3", "l2"),
                   locationName = c("c", "c", "a", "b"),
-                  deploymentstart = ymd_hms(c("2000/01/01 00:00:00",
+                  deploymentStart = ymd_hms(c("2000/01/01 00:00:00",
                                               "2000/02/20 00:00:00",
                                               "2000/01/01 00:00:00",
                                               "2000/01/01 00:00:00")),
-                  deploymentend = ymd_hms(c("2000/02/01 00:00:00",
+                  deploymentEnd = ymd_hms(c("2000/02/01 00:00:00",
                                             "2000/03/01 00:00:00",
                                             "2000/02/01 00:00:00",
                                             "2000/03/01 00:00:00")))
@@ -27,7 +26,8 @@ observations <- data.frame(deploymentID = c("d1", "d1", "d2", "d3", "d4", "d4", 
 pk <- list(data=list(observations=observations, deployments=deployments))
 
 make_emat(deployments)
-make_dmat(deployments, observations, type="c")
+make_dmat(deployments, observations)
+make_dmat(deployments, subset(observations, scientificName=="sp2"))
 make_dmat(deployments, subset(observations, scientificName=="sp2"), type="c")
 
 make_detection_matrix(pk, species = "sp2", type="c")
@@ -40,6 +40,9 @@ res$cuts
 
 
 # Agouti export data ####
+
 library(camtrapdp)
 pk <- camtrapdp::read_camtrapdp("C:/Users/rowcliffe.m/OneDrive - Zoological Society of London/GitHub/camtrapDensity/rem-test-20241111152200/datapackage.json")
-make_detection_matrix(pk, species = "Vulpes vulpes")
+spp <- unique(pk$data$observations$scientificName)
+spp <- spp[!is.na(spp)]
+make_detection_matrix(pk, species = spp)

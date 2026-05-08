@@ -10,7 +10,11 @@ library(dplyr)
 #' OUTPUT
 #' A regular sequence of POSIX data-times spanning the range of start / end
 #' 
-make_cutSeq <- function(start, end, interval=7, start_hour=0){
+make_cuts <- function(start, end, interval=7, start_hour=0){
+  if(!all(inherits(deployments$deploymentStart, "POSIXt"),
+          inherits(deployments$deploymentEnd, "POSIXt")))
+    stop("start and end must be class POSIXt")
+  
   mn <- min(start) %>%
     as.POSIXlt()
   mx <- max(end)
@@ -25,30 +29,39 @@ make_cutSeq <- function(start, end, interval=7, start_hour=0){
 #' 
 #' INPUT
 #' deployments: a dataframe of deployment data with columns
-#'    locationID: location identifiers
-#'    locationName: alternative location identifiers, typically shorter, locally unique
+#'    locationName: location identifier
 #'    deploymentStart / deploymentEnd: POSIX date-times at which deployments start and end
 #' cuts: a sequence of POSIX date-times defining detection occasions
-#'    Generated internally using make_cutSeq if NULL
-#' interval / start_hour: passed to make_cutSeq if cuts is NULL
+#'    Generated internally using make_cuts if NULL
+#' interval / start_hour: passed to make_cuts if cuts is NULL
 #' 
 #' OUTPUT
 #' A list with elements:
 #'    effort: a sites x occasions numeric matrix of effort in days
 #'    cuts: a POSIX vector of the occasion date-time cutpoints
-#'    
-make_emat <- function(deployments, cuts = NULL,
-                      interval = 7, start_hour = 0){
-  if(is.null(cuts)) cuts <- make_cutSeq(deployments$deploymentStart, 
-                                        deployments$deploymentEnd, 
-                                        interval = interval,
-                                        start_hour = start_hour)
+
+make_emat <- function(deployments, 
+                      cuts = NULL,
+                      interval = 7, 
+                      start_hour = 0){
+  
+  # Check required data columns present
+  req <- c("locationName", "deploymentStart", "deploymentEnd")
+  if(!all(req %in% names(deployments)))
+    stop(paste(c("deployments must contain columns:", depReq), collapse=" "))
+  
+  # Make cuts if necessary, check they make sense
+  if(is.null(cuts)) cuts <- make_cuts(deployments$deploymentStart, 
+                                      deployments$deploymentEnd, 
+                                      interval = interval,
+                                      start_hour = start_hour)
   intervals <- as.numeric(diff(cuts))
   if(any(intervals <= 0))
     stop("cuts are not continually increasing")
   if(min(deployments$deploymentStart) < min(cuts) | max(deployments$deploymentEnd) > max(cuts))
     stop("cuts do not span start/end times")
   
+  # Make effort matrix
   nocc <- length(intervals)
   ndep <- nrow(deployments)
   emat <- data.frame(loc = rep(deployments$locationName, nocc),
@@ -63,14 +76,14 @@ make_emat <- function(deployments, cuts = NULL,
                   c2_s = as.numeric(difftime(c2, s, units="day")),
                   e_s = as.numeric(difftime(e, s, units="day")),
                   sums = (c1<s) + (c2<=s) + (c1<e) + (c2<=e),
-                  sel = case_when(sums==1 ~ "e_c1",
-                                  sums==2 & c2>e ~ "e_s",
-                                  sums==2 & c2<=e ~ "i",
-                                  sums==3 ~ "c2_s",
-                                  .default = "z")) %>%
+                  sel = dplyr::case_when(sums==1 ~ "e_c1",
+                                         sums==2 & c2>e ~ "e_s",
+                                         sums==2 & c2<=e ~ "i",
+                                         sums==3 ~ "c2_s",
+                                         .default = "z")) %>%
     rowwise() %>%
-    mutate(eff = get(sel)) %>%
-    select(loc, occ, eff) %>%
+    dplyr::mutate(eff = get(sel)) %>%
+    dplyr::select(loc, occ, eff) %>%
     dplyr::group_by(loc, occ) %>%
     dplyr::summarise(eff = sum(eff), .groups = "drop") %>%
     dplyr::ungroup() %>%
@@ -86,53 +99,80 @@ make_emat <- function(deployments, cuts = NULL,
 #' deployments: dataframe of deployment data with columns as for make_emat plus:
 #'    deploymentID: deployment identifier matched with observations$deploymentID
 #' observations: dataframe of observation data with columns:
-#'    deploymentID: deployment identifiers
+#'    deploymentID: deployment identifiers, which must all be present in deployments
 #'    eventStart: POSIX date-times of observation occurence
-#' cuts: vector sequence of POSIX values (see make_emat)
-#' trim: logical, whether incomplete cells (effort<interval) should be set to NA
-#' interval / start_hour: passed to make_emat then make_cutSeq if effort is NULL
+#' cuts / interval / start_hour: passed to make_emat
 #' type: presence returns a binary presence/absence matrix; count returns an
 #'    observation count matrix
+#' trim: logical, whether incomplete cells (effort<interval) should be set to NA
+#' fail_outliers: what to do if any observations lie outside their deployment;
+#'    if TRUE, outlying observations are returned; 
+#'    if FALSE, a matrix is returned with any outliers discarded
 #' 
 #' OUTPUT
-#' A sites x occasions detection / non-detection matrix
-#' 
-#' DETAILS
-#' Cuts must span deployment start/end times but not observations times - any
-#' observations outside cuts range will simply be ignored without a warning.
+#' A sites x occasions detection or count matrix
+
 make_dmat <- function(deployments, observations, 
                       cuts = NULL,
-                      trim = FALSE, 
                       interval = 7, 
                       start_hour = 0,
-                      type = c("presence", "count")){
-  type <- match.arg(type)
-  effort <- make_emat(deployments, 
-                      cuts=cuts, 
-                      interval=interval, 
-                      start_hour=start_hour)
-  if("locationName" %in% names(observations))
-    observations <- dplyr::select(observations, -locationName)
-  observations <- deployments %>%
-    dplyr::select(deploymentID, locationName) %>%
-    dplyr::right_join(observations, by=join_by(deploymentID))
-  locs <- sort(unique(deployments$locationName))
-  nobs <- nrow(observations)
-  nloc <- length(locs)
-  nocc <- length(effort$cuts) - 1
-  ijk <- expand.grid(loc=1:nloc, occ=1:nocc, obs=1:nobs)
-  deploc <- locs[ijk$loc]
-  obsloc <- observations$locationName[ijk$obs]
-  ts <- observations$eventStart[ijk$obs]
-  cut1 <- effort$cuts[ijk$occ]
-  cut2 <- effort$cuts[ijk$occ+1]
-  isin <- ts >= cut1 & ts < cut2 & obsloc == deploc %>%
-    array(c(nloc, nocc, nobs))
-  mat <- apply(isin, 1:2, sum)
-  if(type == "presence") mat[mat>1] <- 1
-  emult <- if(trim) ifelse(effort$effort<interval, NA, 1) else 
-    ifelse(effort$effort==0, NA, 1)
-  mat * emult
+                      type = c("presence", "count"),
+                      trim = FALSE, 
+                      fail_outliers=FALSE){
+  
+  # Check necessary data fields are present
+  if(!all("deploymentID" %in% names(deployments),
+          c("deploymentID", "eventStart") %in% names(observations)))
+    stop("deployments and observations must both contain a deploymentID column;
+         observations must also contain an eventStart column")
+  
+  # Check all observation deploymentIDs are present in deployments
+  missingDeps <- observations %>%
+    dplyr::filter(!deploymentID %in% deployments$deploymentID) %>%
+    dplyr::pull(deploymentID) %>%
+    unique()
+  if(length(missingDeps)>0)
+    stop(paste(c("These observation deploymentIDs are missing from deployments:",
+                 missingDeps), 
+               collapse = "\n"))
+  
+  # Check observations all occur within their deployments (if fail_outliers == TRUE)
+  checkdat <- dplyr::left_join(observations, deployments, by="deploymentID")
+  badObs <- with(checkdat, eventStart<deploymentStart | eventStart>deploymentEnd)
+  if(any(badObs) & fail_outliers){
+    message("Error: some observations occur outside their deployment time - they have been returned")
+    return(checkdat[bad, ])
+  } else{
+    # Make matrices  
+    type <- match.arg(type)
+    observations <- observations[!badObs, ]
+    effort <- make_emat(deployments, 
+                        cuts=cuts, 
+                        interval=interval, 
+                        start_hour=start_hour)
+    if("locationName" %in% names(observations))
+      observations <- dplyr::select(observations, -locationName)
+    observations <- deployments %>%
+      dplyr::select(deploymentID, locationName) %>%
+      dplyr::right_join(observations, by=join_by(deploymentID))
+    locs <- sort(unique(deployments$locationName))
+    nobs <- nrow(observations)
+    nloc <- length(locs)
+    nocc <- length(effort$cuts) - 1
+    ijk <- expand.grid(loc=1:nloc, occ=1:nocc, obs=1:nobs)
+    deploc <- locs[ijk$loc]
+    obsloc <- observations$locationName[ijk$obs]
+    ts <- observations$eventStart[ijk$obs]
+    cut1 <- effort$cuts[ijk$occ]
+    cut2 <- effort$cuts[ijk$occ+1]
+    isin <- ts >= cut1 & ts < cut2 & obsloc == deploc %>%
+      array(c(nloc, nocc, nobs))
+    mat <- apply(isin, 1:2, sum)
+    if(type == "presence") mat[mat>1] <- 1
+    emult <- if(trim) ifelse(effort$effort<interval, NA, 1) else 
+      ifelse(effort$effort==0, NA, 1)
+    mat * emult
+  }
 }
 
 #' Make a detection matrix from a camtrapDP datapackage
@@ -143,9 +183,8 @@ make_dmat <- function(deployments, observations,
 #'    required columns as for make_dmat, plus scientificName required in observations
 #' species: a character vector giving one or more species to create matrices for;
 #'    uses scientific binomial names, matched in observations$scientificName
-#' trim / interval / start_hour / type: arguments passed to make_dmat
-#' fail_outliers: logical, if TRUE function fails if any observations are outside
-#'    their deployment time
+#' trim / interval / start_hour / type / fail_outliers:
+#'    arguments passed to make_dmat
 #' 
 #' OUTPUT
 #' A list with elements:
@@ -159,15 +198,8 @@ make_detection_matrix <- function(pkg,
                                   trim=FALSE,
                                   interval=7,
                                   start_hour=0,
+                                  type = c("presence", "count"),
                                   fail_outliers=FALSE){
-  obsReq <- c("deploymentID", "scientificName", "eventStart")
-  depReq <- c("deploymentID", "locationName", "deploymentStart", "deploymentEnd")
-  fieldsOK <- all(obsReq %in% names(pkg$data$observations),
-                  depReq %in% names(pkg$data$deployments))
-  if(!fieldsOK) 
-    stop("Can't find the necessary data: 
-         obsdat must contain columns named eventStart and locationName; 
-         depdat must contain columns named deploymentStart, deploymentEnd and locationName")
   
   if(!all(species %in% pkg$data$observations$scientificName))
     stop("Can't find any observations for that/those species")
@@ -178,30 +210,17 @@ make_detection_matrix <- function(pkg,
   obsdat <- pkg$data$observations %>%
     dplyr::mutate(deploymentID = as.character(deploymentID))
   
-  missingDeps <- unique(obsdat$deploymentID[!obsdat$deploymentID %in% depdat$deploymentID])
-  if(length(missingDeps)>0)
-    stop(paste("These deploymentID values in obsdat are missing from depdat:",
-               paste(missingDeps, collapse = " ")))
-  
-  checkdat <- dplyr::left_join(obsdat, 
-                               dplyr::select(depdat, deploymentID, deploymentStart, deploymentEnd),
-                               by="deploymentID")
-  bad <- with(checkdat, eventStart<deploymentStart | eventStart>deploymentEnd)
-  if(any(bad) & fail_outliers){
-    message("Error: some observations occur outside their deployment time: 
-            returning problematic observations")
-    return(checkdat[bad, ])
-  } else{
-    obsdat <- subset(obsdat, !bad)
-    effort <- make_emat(depdat)
-    dmats <- lapply(species, function(sp) 
-      make_dmat(depdat, 
-                subset(obsdat, scientificName==sp),
-                trim = trim, 
-                interval = interval, 
-                start_hour = start_hour,
-                type = type))
-    names(dmats) <- species
-    return(c(effort, matrix=list(dmats)))
-  }
+  emat <- make_emat(depdat,
+                    interval=interval, 
+                    start_hour=start_hour)
+  dmats <- lapply(species, function(sp) 
+    make_dmat(depdat, 
+              subset(obsdat, scientificName==sp),
+              trim = trim, 
+              interval = interval, 
+              start_hour = start_hour,
+              type = type,
+              fail_outliers = fail_outliers))
+  names(dmats) <- species
+  return(c(emat, matrix=list(dmats)))
 }
