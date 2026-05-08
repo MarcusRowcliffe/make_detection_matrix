@@ -43,6 +43,17 @@ res$cuts
 
 library(camtrapdp)
 pk <- camtrapdp::read_camtrapdp("C:/Users/rowcliffe.m/OneDrive - Zoological Society of London/GitHub/camtrapDensity/rem-test-20241111152200/datapackage.json")
+# single species
+make_detection_matrix(pk, species="Vulpes vulpes")
+# multiple species
 spp <- unique(pk$data$observations$scientificName)
 spp <- spp[!is.na(spp)]
-make_detection_matrix(pk, species = spp)
+make_detection_matrix(pk, species=spp)
+# change occasion interval
+make_detection_matrix(pk, species=spp, interval=4)
+# count rather than presence absence
+make_detection_matrix(pk, species=spp, interval=4, type="count")
+
+library(camtrapDensity)
+pk0 <- camtraptor::read_camtrap_dp("C:/Users/rowcliffe.m/OneDrive - Zoological Society of London/GitHub/camtrapDensity/rem-test-20241111152200/datapackage.json")
+plot_deployment_schedule(pk0)

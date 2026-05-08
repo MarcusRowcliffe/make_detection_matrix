@@ -11,8 +11,8 @@ library(dplyr)
 #' A regular sequence of POSIX data-times spanning the range of start / end
 #' 
 make_cuts <- function(start, end, interval=7, start_hour=0){
-  if(!all(inherits(deployments$deploymentStart, "POSIXt"),
-          inherits(deployments$deploymentEnd, "POSIXt")))
+  if(!all(inherits(start, "POSIXt"),
+          inherits(end, "POSIXt")))
     stop("start and end must be class POSIXt")
   
   mn <- min(start) %>%
@@ -136,14 +136,15 @@ make_dmat <- function(deployments, observations,
                  missingDeps), 
                collapse = "\n"))
   
-  # Check observations all occur within their deployments (if fail_outliers == TRUE)
+  # Check observations all occur within their deployments...
   checkdat <- dplyr::left_join(observations, deployments, by="deploymentID")
   badObs <- with(checkdat, eventStart<deploymentStart | eventStart>deploymentEnd)
+  # ...if not and fail_outliers, fail...
   if(any(badObs) & fail_outliers){
     message("Error: some observations occur outside their deployment time - they have been returned")
     return(checkdat[bad, ])
   } else{
-    # Make matrices  
+    # ...otherwise, make matrices  
     type <- match.arg(type)
     observations <- observations[!badObs, ]
     effort <- make_emat(deployments, 
@@ -178,11 +179,14 @@ make_dmat <- function(deployments, observations,
 #' Make a detection matrix from a camtrapDP datapackage
 #' 
 #' INPUT
-#' pkg: a camtrapDP-like list of camera trap data containing
-#'    package$data$deployments and package$data$observations, dataframes with
-#'    required columns as for make_dmat, plus scientificName required in observations
-#' species: a character vector giving one or more species to create matrices for;
-#'    uses scientific binomial names, matched in observations$scientificName
+#' pkg: a list of camtrapDP V>1+ data containing dataframes:
+#'    - pkg$data$deployments
+#'    - pkg$data$observations
+#'    Required columns for these as for make_dmat, plus scientificName and 
+#'    observationLevel required in observations
+#' species: a character vector giving one or more species for which to create
+#'    matrices; filters on scientific binomial names matched in 
+#'    pkg$data$observations$scientificName
 #' trim / interval / start_hour / type / fail_outliers:
 #'    arguments passed to make_dmat
 #' 
@@ -215,7 +219,7 @@ make_detection_matrix <- function(pkg,
                     start_hour=start_hour)
   dmats <- lapply(species, function(sp) 
     make_dmat(depdat, 
-              subset(obsdat, scientificName==sp),
+              subset(obsdat, scientificName==sp & observationLevel=="event"),
               trim = trim, 
               interval = interval, 
               start_hour = start_hour,
